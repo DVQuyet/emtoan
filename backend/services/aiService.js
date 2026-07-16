@@ -7,7 +7,7 @@ import Question from '../models/Question.js';
 import Exam from '../models/Exam.js';
 import ReferenceDoc from '../models/ReferenceDoc.js';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const apiKeys = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean) : [];
 const apiKey = apiKeys[0];
@@ -202,13 +202,10 @@ const callModelWithSignal = async (key, state, prompt, signal, isJson = false) =
         const result = await modelInstance.generateContent(request, reqOptions);
         return result.response.text().trim();
       } catch (error) {
-        const errMsg = error.message?.toLowerCase() || '';
-        const isRetryable = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('rate_limit') || errMsg.includes('503') || errMsg.includes('timeout') || error.name === 'AbortError';
-        
-        if (isRetryable && geminiClients.length > 1 && attempts < maxAttempts - 1) {
+        if (geminiClients.length > 1 && attempts < maxAttempts - 1) {
           attempts++;
           rotateGeminiKey();
-          console.warn(`[Key Rotation] Phát hiện lỗi tạm thời (${error.message}). Đang thử lại với key dự phòng tiếp theo (lần thử ${attempts + 1}/${maxAttempts})...`);
+          console.warn(`[Key Rotation] Phát hiện lỗi (${error.message}). Tự động xoay sang key dự phòng tiếp theo (lần thử ${attempts + 1}/${maxAttempts})...`);
           continue;
         }
         throw error;
