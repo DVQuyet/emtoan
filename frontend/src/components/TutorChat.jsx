@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, User, Bot, RefreshCw, HelpCircle } from 'lucide-react';
 import MathText from './MathText';
+import { API_BASE_URL } from '../config';
 
 export default function TutorChat() {
   const [messages, setMessages] = useState([
@@ -31,7 +32,7 @@ export default function TutorChat() {
 
     try {
       // Gửi toàn bộ lịch sử lên API để duy trì ngữ cảnh cuộc trò chuyện
-      const res = await fetch('http://localhost:3000/api/tutor/chat', {
+      const res = await fetch(`${API_BASE_URL}/api/tutor/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

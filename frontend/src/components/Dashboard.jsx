@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Award, ShieldAlert, Sparkles, RefreshCw, Calendar, Clock, AlertTriangle, Library, BookOpenCheck } from 'lucide-react';
 import MathText from './MathText';
+import { API_BASE_URL } from '../config';
 
 export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
   const [user, setUser] = useState(null);
@@ -72,7 +73,7 @@ export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
     try {
       setLoading(true);
       // Lấy thông tin user Nguyễn Văn A (đã có từ seed data)
-      const userRes = await fetch('http://localhost:3000/api/users');
+      const userRes = await fetch(`${API_BASE_URL}/api/users`);
       const users = await userRes.json();
       if (users && users.length > 0) {
         const activeUser = users.find(u => u._id === userId) || users[0];
@@ -80,12 +81,12 @@ export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
       }
 
       // Lấy danh sách đề thi
-      const examRes = await fetch('http://localhost:3000/api/exams');
+      const examRes = await fetch(`${API_BASE_URL}/api/exams`);
       const examsData = await examRes.json();
       setExams(examsData);
 
       // Lấy lịch sử làm bài thi
-      const historyRes = await fetch('http://localhost:3000/api/test-attempts');
+      const historyRes = await fetch(`${API_BASE_URL}/api/test-attempts`);
       const historyData = await historyRes.json();
       // Lọc các attempt của học sinh hiện tại và sắp xếp mới nhất lên đầu
       if (users && users.length > 0) {
@@ -97,7 +98,7 @@ export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
       }
 
       // Tải danh sách chủ đề động từ MongoDB
-      const topicsRes = await fetch('http://localhost:3000/api/topics');
+      const topicsRes = await fetch(`${API_BASE_URL}/api/topics`);
       if (topicsRes.ok) {
         const topicsData = await topicsRes.json();
         setTopics(topicsData);
@@ -131,7 +132,7 @@ export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch('http://localhost:3000/api/tutor/knowledge-summary', {
+      const res = await fetch(`${API_BASE_URL}/api/tutor/knowledge-summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topicId: selectedTopicId, stream: true })
@@ -198,7 +199,7 @@ export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch('http://localhost:3000/api/exams/generate', {
+      const res = await fetch(`${API_BASE_URL}/api/exams/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -295,7 +296,7 @@ export default function Dashboard({ userId, onStartExam, activeAttemptId }) {
                 const triggerLoad = async () => {
                   setLoadingSummary(true);
                   try {
-                    const res = await fetch('http://localhost:3000/api/tutor/knowledge-summary', {
+                    const res = await fetch(`${API_BASE_URL}/api/tutor/knowledge-summary`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ topicId: selectedTopicId })

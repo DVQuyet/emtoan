@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, ShieldAlert, BookOpen, Trash2, Plus, Sparkles, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Eye, Database, UploadCloud, FileText } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 export default function AdminDashboard() {
   const [activeSubTab, setActiveSubTab] = useState('students');
@@ -111,23 +112,23 @@ export default function AdminDashboard() {
       setLoading(true);
       
       // 1. Tải danh sách học sinh
-      const userRes = await fetch('http://localhost:3000/api/users');
+      const userRes = await fetch(`${API_BASE_URL}/api/users`);
       const usersData = await userRes.json();
       setUsers(usersData);
 
       // 2. Tải danh sách đề thi
-      const examRes = await fetch('http://localhost:3000/api/exams');
+      const examRes = await fetch(`${API_BASE_URL}/api/exams`);
       const examsData = await examRes.json();
       setExams(examsData);
 
       // 3. Tải danh sách bài thi & giám sát
-      const attemptRes = await fetch('http://localhost:3000/api/test-attempts');
+      const attemptRes = await fetch(`${API_BASE_URL}/api/test-attempts`);
       const attemptsData = await attemptRes.json();
       // Sắp xếp mới nhất lên đầu
       setAttempts(attemptsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
 
       // 4. Tải tài liệu AI hiện tại
-      const refRes = await fetch('http://localhost:3000/api/admin/reference');
+      const refRes = await fetch(`${API_BASE_URL}/api/admin/reference`);
       if (refRes.ok) {
         const refData = await refRes.json();
         setActiveRefDoc(refData);
@@ -136,7 +137,7 @@ export default function AdminDashboard() {
       }
 
       // 5. Tải danh sách tất cả tài liệu AI
-      const docsRes = await fetch('http://localhost:3000/api/admin/documents');
+      const docsRes = await fetch(`${API_BASE_URL}/api/admin/documents`);
       if (docsRes.ok) {
         const docsData = await docsRes.json();
         setDocuments(docsData);
@@ -145,7 +146,7 @@ export default function AdminDashboard() {
       }
 
       // 6. Tải danh sách chủ đề (Topics) từ MongoDB
-      const topicsRes = await fetch('http://localhost:3000/api/topics');
+      const topicsRes = await fetch(`${API_BASE_URL}/api/topics`);
       if (topicsRes.ok) {
         const topicsData = await topicsRes.json();
         setDbTopics(topicsData);
@@ -171,7 +172,7 @@ export default function AdminDashboard() {
     if (!window.confirm("Bạn có chắc chắn muốn xóa đề thi này không? Hành động này không thể hoàn tác.")) return;
     
     try {
-      const res = await fetch(`http://localhost:3000/api/exams/${examId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/exams/${examId}`, {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -202,7 +203,7 @@ export default function AdminDashboard() {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch('http://localhost:3000/api/exams/generate', {
+      const res = await fetch(`${API_BASE_URL}/api/exams/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -283,7 +284,7 @@ export default function AdminDashboard() {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch(`http://localhost:3000/api/admin/upload-reference?stream=true`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/upload-reference?stream=true`, {
         method: 'POST',
         body: formData
       });
@@ -348,7 +349,7 @@ export default function AdminDashboard() {
   const handleDeletePdf = async (docId) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa tài liệu ngữ cảnh này? AI sẽ không còn ngữ cảnh chuyên môn.")) return;
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/reference/${docId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/reference/${docId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -363,7 +364,7 @@ export default function AdminDashboard() {
   // Đặt làm tài liệu mặc định
   const handleSetActivePdf = async (docId) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/reference/${docId}/active`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/reference/${docId}/active`, {
         method: 'PUT'
       });
       if (res.ok) {
@@ -397,7 +398,7 @@ export default function AdminDashboard() {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch('http://localhost:3000/api/admin/analyze-topics?stream=true', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/analyze-topics?stream=true`, {
         method: 'POST',
         body: formData
       });
@@ -463,7 +464,7 @@ export default function AdminDashboard() {
     if (topicsToSave.length === 0) return alert("Vui lòng chọn ít nhất một chủ đề để lưu.");
 
     try {
-      const res = await fetch('http://localhost:3000/api/admin/topics/batch', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/topics/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topics: topicsToSave })
@@ -490,7 +491,7 @@ export default function AdminDashboard() {
 
     setSavingManualTopic(true);
     try {
-      const res = await fetch('http://localhost:3000/api/admin/topics', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/topics`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -522,7 +523,7 @@ export default function AdminDashboard() {
   const handleDeleteTopic = async (id) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa chủ đề này khỏi hệ thống? Các đề thi thuộc chủ đề này vẫn giữ nguyên.")) return;
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/topics/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/topics/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -1011,7 +1012,7 @@ export default function AdminDashboard() {
                             }
                             setSavingQuickTopic(true);
                             try {
-                              const res = await fetch('http://localhost:3000/api/admin/topics', {
+                              const res = await fetch(`${API_BASE_URL}/api/admin/topics`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1031,7 +1032,7 @@ export default function AdminDashboard() {
                                 setShowQuickAddTopic(false);
                                 
                                 // Tải lại danh sách chủ đề
-                                const tRes = await fetch('http://localhost:3000/api/topics');
+                                const tRes = await fetch(`${API_BASE_URL}/api/topics`);
                                 if (tRes.ok) {
                                   const tData = await tRes.json();
                                   setDbTopics(tData);
@@ -1349,7 +1350,7 @@ export default function AdminDashboard() {
                                     onClick={async () => {
                                       setSavingEditTopic(true);
                                       try {
-                                        const res = await fetch(`http://localhost:3000/api/admin/reference/${doc._id}/classify`, {
+                                        const res = await fetch(`${API_BASE_URL}/api/admin/reference/${doc._id}/classify`, {
                                           method: 'PUT',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({

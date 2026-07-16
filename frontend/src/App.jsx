@@ -5,6 +5,7 @@ import QuizRunner from './components/QuizRunner';
 import TutorChat from './components/TutorChat';
 import AdminDashboard from './components/AdminDashboard';
 import { LayoutDashboard, MessageSquare, GraduationCap, UserCog, LogOut, User } from 'lucide-react';
+import { API_BASE_URL } from './config';
 
 function App() {
   // Đọc session từ localStorage khi khởi động
@@ -129,7 +130,7 @@ function App() {
     }
 
     try {
-      const res = await fetch('http://localhost:3000/api/exams/start', {
+      const res = await fetch(`${API_BASE_URL}/api/exams/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, examId })

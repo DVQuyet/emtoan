@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, GraduationCap, ShieldCheck, Mail, User, Info } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 export default function Login({ onLogin }) {
   const [emailInput, setEmailInput] = useState('');
@@ -28,7 +29,7 @@ export default function Login({ onLogin }) {
     const fullName = fullNameInput.trim() || query;
 
     try {
-      const res = await fetch('http://localhost:3000/api/users', {
+      const res = await fetch(`${API_BASE_URL}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

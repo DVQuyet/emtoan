@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, Timer, HelpCircle, CheckCircle, XCircle, ArrowRight, BookOpen, AlertOctagon, Brain, Sparkles } from 'lucide-react';
 import MathText from './MathText';
+import { API_BASE_URL } from '../config';
 
 export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
   const [exam, setExam] = useState(null);
@@ -94,7 +95,7 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
         ]);
         setShowProgressModal(true);
 
-        const url = `http://localhost:3000/api/exams/${examId}/adaptive?userId=${userId}&attemptId=${attemptId}&stream=true`;
+        const url = `${API_BASE_URL}/api/exams/${examId}/adaptive?userId=${userId}&attemptId=${attemptId}&stream=true`;
         const res = await fetch(url);
         
         if (!res.ok) {
@@ -175,7 +176,7 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
 
     const logCheatEvent = async (eventType, details) => {
       try {
-        await fetch(`http://localhost:3000/api/test-attempts/${attemptId}/cheat-log`, {
+        await fetch(`${API_BASE_URL}/api/test-attempts/${attemptId}/cheat-log`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ eventType, details }),
@@ -314,7 +315,7 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
     const currentQuestion = exam.questions[currentIdx];
 
     try {
-      const res = await fetch(`http://localhost:3000/api/exams/submit-answer`, {
+      const res = await fetch(`${API_BASE_URL}/api/exams/submit-answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -353,7 +354,7 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch(`http://localhost:3000/api/exams/submit`, {
+      const res = await fetch(`${API_BASE_URL}/api/exams/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attemptId, stream: true })
@@ -436,7 +437,7 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
       ]);
       setShowProgressModal(true);
 
-      const res = await fetch(`http://localhost:3000/api/exams/submit`, {
+      const res = await fetch(`${API_BASE_URL}/api/exams/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attemptId, stream: true, isCheated: true })
