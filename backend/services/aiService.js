@@ -193,12 +193,12 @@ const callModelWithSignal = async (key, state, prompt, signal, isJson = false) =
         return result.response.text().trim();
       } catch (error) {
         const errMsg = error.message?.toLowerCase() || '';
-        const isRateLimit = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('rate_limit');
+        const isRetryable = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('rate_limit') || errMsg.includes('503') || errMsg.includes('timeout') || error.name === 'AbortError';
         
-        if (isRateLimit && geminiClients.length > 1 && attempts < maxAttempts - 1) {
+        if (isRetryable && geminiClients.length > 1 && attempts < maxAttempts - 1) {
           attempts++;
           rotateGeminiKey();
-          console.warn(`[Key Rotation] Đang thử lại với key dự phòng tiếp theo (lần thử ${attempts + 1}/${maxAttempts})...`);
+          console.warn(`[Key Rotation] Phát hiện lỗi tạm thời (${error.message}). Đang thử lại với key dự phòng tiếp theo (lần thử ${attempts + 1}/${maxAttempts})...`);
           continue;
         }
         throw error;
