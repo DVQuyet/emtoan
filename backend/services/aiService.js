@@ -52,28 +52,38 @@ const initGeminiModels = async () => {
     if (!res.ok) {
       throw new Error(`Google API returned status ${res.status}: ${data.error?.message || 'Unknown error'}`);
     }
-    const availableModels = data.models ? data.models.map(m => m.name) : [];
+    const availableModels = data.models ? data.models.map(m => m.name.replace('models/', '')) : [];
     
-    // Ánh xạ động các mô hình phù hợp từ Google
-    if (availableModels.includes('models/gemini-3.1-pro-preview')) {
+    // 1. Ánh xạ Pro Model
+    if (availableModels.includes('gemini-2.5-pro')) {
+      modelStates['gemini-3.1-pro'].name = 'gemini-2.5-pro';
+    } else if (availableModels.includes('gemini-3.1-pro-preview')) {
       modelStates['gemini-3.1-pro'].name = 'gemini-3.1-pro-preview';
-    } else if (availableModels.includes('models/gemini-3.1-pro')) {
-      modelStates['gemini-3.1-pro'].name = 'gemini-3.1-pro';
+    } else if (availableModels.includes('gemini-1.5-pro')) {
+      modelStates['gemini-3.1-pro'].name = 'gemini-1.5-pro';
     } else {
       modelStates['gemini-3.1-pro'].name = 'gemini-2.5-pro';
     }
 
-    if (availableModels.includes('models/gemini-3.5-flash')) {
-      modelStates['gemini-3.5-flash'].name = 'gemini-3.5-flash';
-    } else {
-      modelStates['gemini-3.5-flash'].name = 'gemini-2.5-flash';
-    }
+    // 2. Ánh xạ Flash Models (Ưu tiên gemini-2.0-flash và gemini-1.5-flash hoạt động tốt cho tất cả các keys)
+    const flashOrder = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-3.5-flash'];
+    const activeFlashModels = flashOrder.filter(m => availableModels.includes(m));
+    
+    modelStates['gemini-3.5-flash'].name = activeFlashModels[0] || 'gemini-2.0-flash';
+    modelStates['gemini-2.5-flash'].name = activeFlashModels[1] || 'gemini-1.5-flash';
+    modelStates['gemini-flash-latest'].name = activeFlashModels[2] || 'gemini-2.0-flash';
 
-    console.log(`=== Khởi tạo thành công các dịch vụ AI Gemini với ${geminiClients.length} keys (3.1 Pro -> ${modelStates['gemini-3.1-pro'].name}, 3.5 Flash -> ${modelStates['gemini-3.5-flash'].name}) ===`);
+    console.log(`=== Khởi tạo thành công các dịch vụ AI Gemini với ${geminiClients.length} keys ===`);
+    console.log(`  - Pro model: ${modelStates['gemini-3.1-pro'].name}`);
+    console.log(`  - Flash 1: ${modelStates['gemini-3.5-flash'].name}`);
+    console.log(`  - Flash 2: ${modelStates['gemini-2.5-flash'].name}`);
+    console.log(`  - Flash 3: ${modelStates['gemini-flash-latest'].name}`);
   } catch (error) {
     console.error("Lỗi khi kết nối Google API để lấy danh sách models, sử dụng danh sách mặc định:", error.message);
-    modelStates['gemini-3.1-pro'].name = 'gemini-3.1-pro-preview';
-    modelStates['gemini-3.5-flash'].name = 'gemini-3.5-flash';
+    modelStates['gemini-3.1-pro'].name = 'gemini-2.5-pro';
+    modelStates['gemini-3.5-flash'].name = 'gemini-2.0-flash';
+    modelStates['gemini-2.5-flash'].name = 'gemini-1.5-flash';
+    modelStates['gemini-flash-latest'].name = 'gemini-2.0-flash';
   }
 };
 
