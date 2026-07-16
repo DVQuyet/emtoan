@@ -923,17 +923,6 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
                 </div>
               ))}
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--panel-border)', paddingTop: '1rem', marginTop: '0.5rem' }}>
-              <button 
-                className="btn btn-outline"
-                disabled={progressSteps.some(s => s.status === 'loading')}
-                onClick={() => setShowProgressModal(false)}
-                style={{ padding: '0.5rem 1.5rem', fontSize: '0.85rem' }}
-              >
-                Đóng
-              </button>
-            </div>
           </div>
         </div>
       )}
