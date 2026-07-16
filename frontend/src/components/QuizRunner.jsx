@@ -10,18 +10,26 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
   const [answeredMap, setAnsweredMap] = useState({}); // Lịch sử trả lời câu hỏi: { questionId: { selected, isCorrect, socraticHint } }
   const [timeLeft, setTimeLeft] = useState(0);
   const [cheats, setCheats] = useState({ tabSwitches: 0, fullscreenExits: 0, windowBlurs: 0, tabCloses: 0 });
-  const [isFullscreen, setIsFullscreen] = useState(!!(
-    document.fullscreenElement ||
-    document.webkitFullscreenElement ||
-    document.mozFullScreenElement ||
-    document.msFullscreenElement
-  ));
-  const [hasStarted, setHasStarted] = useState(!!(
-    document.fullscreenElement ||
-    document.webkitFullscreenElement ||
-    document.mozFullScreenElement ||
-    document.msFullscreenElement
-  ));
+  const isFullscreenSupported = !!(
+    document.documentElement.requestFullscreen ||
+    document.documentElement.webkitRequestFullScreen ||
+    document.documentElement.mozRequestFullScreen ||
+    document.documentElement.msRequestFullscreen
+  );
+
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  const checkIsFullscreen = () => {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+  };
+
+  const [isFullscreen, setIsFullscreen] = useState(checkIsFullscreen() || !isFullscreenSupported || isMobile);
+  const [hasStarted, setHasStarted] = useState(checkIsFullscreen() || !isFullscreenSupported || isMobile);
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -150,6 +158,38 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
     fetchExam();
   }, [examId, userId, attemptId]);
 
+  // Tự động kích hoạt toàn màn hình khi vào phòng thi
+  useEffect(() => {
+    const requestAutoFS = async () => {
+      const docElm = document.documentElement;
+      try {
+        if (docElm.requestFullscreen) {
+          await docElm.requestFullscreen();
+          setIsFullscreen(true);
+        } else if (docElm.webkitRequestFullScreen) {
+          await docElm.webkitRequestFullScreen();
+          setIsFullscreen(true);
+        } else if (docElm.mozRequestFullScreen) {
+          await docElm.mozRequestFullScreen();
+          setIsFullscreen(true);
+        } else if (docElm.msRequestFullscreen) {
+          await docElm.msRequestFullscreen();
+          setIsFullscreen(true);
+        }
+      } catch (e) {
+        console.warn("Tự động bật toàn màn hình bị trình duyệt từ chối:", e.message);
+        if (isMobile || !isFullscreenSupported) {
+          setIsFullscreen(true);
+        }
+      }
+    };
+    
+    const timer = setTimeout(() => {
+      requestAutoFS();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
+
 
 
   // 3. Quản lý đồng hồ đếm ngược
@@ -209,6 +249,12 @@ export default function QuizRunner({ attemptId, examId, userId, onFinish }) {
         document.mozFullScreenElement ||
         document.msFullscreenElement
       );
+
+      // Bỏ qua kiểm tra hoặc ghi nhận nếu là mobile hoặc trình duyệt không hỗ trợ Fullscreen API
+      if (!isFullscreenSupported || isMobile) {
+        setIsFullscreen(true);
+        return;
+      }
 
       setIsFullscreen(isCurrentlyFullscreen);
 
