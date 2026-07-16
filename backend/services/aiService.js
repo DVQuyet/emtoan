@@ -665,6 +665,25 @@ Cấu trúc mỗi phần tử câu hỏi trong mảng như sau:
           throw parseErr;
         }
       }
+
+      // Chuẩn hóa kết quả trả về luôn là một mảng
+      if (generatedQuestions && !Array.isArray(generatedQuestions)) {
+        if (Array.isArray(generatedQuestions.questions)) {
+          generatedQuestions = generatedQuestions.questions;
+        } else if (Array.isArray(generatedQuestions.exam)) {
+          generatedQuestions = generatedQuestions.exam;
+        } else if (typeof generatedQuestions === 'object') {
+          const keys = Object.keys(generatedQuestions);
+          const arrayKey = keys.find(k => Array.isArray(generatedQuestions[k]));
+          if (arrayKey) {
+            generatedQuestions = generatedQuestions[arrayKey];
+          } else {
+            generatedQuestions = [generatedQuestions];
+          }
+        } else {
+          generatedQuestions = [];
+        }
+      }
     }
 
     // 2. Lưu các câu hỏi mới vào collection questions
@@ -838,16 +857,36 @@ Kết quả trả về BẮT BUỘC phải là một mảng JSON thuần túy, k
     const rawText = response.content;
     const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const sanitizedText = sanitizeJsonString(cleanJsonText);
+    let parsedTopics;
     try {
-      return JSON.parse(sanitizedText);
+      parsedTopics = JSON.parse(sanitizedText);
     } catch (parseErr) {
       console.warn("JSON.parse chủ đề thất bại, cố gắng tự động sửa chuỗi JSON bị đứt gãy...");
       const repaired = tryRepairJsonArray(sanitizedText);
       if (repaired) {
-        return repaired;
+        parsedTopics = repaired;
+      } else {
+        throw parseErr;
       }
-      throw parseErr;
     }
+
+    // Chuẩn hóa kết quả trả về luôn là một mảng
+    if (parsedTopics && !Array.isArray(parsedTopics)) {
+      if (Array.isArray(parsedTopics.topics)) {
+        parsedTopics = parsedTopics.topics;
+      } else if (typeof parsedTopics === 'object') {
+        const keys = Object.keys(parsedTopics);
+        const arrayKey = keys.find(k => Array.isArray(parsedTopics[k]));
+        if (arrayKey) {
+          parsedTopics = parsedTopics[arrayKey];
+        } else {
+          parsedTopics = [parsedTopics];
+        }
+      } else {
+        parsedTopics = [];
+      }
+    }
+    return parsedTopics;
   } catch (error) {
     console.error("Lỗi khi phân tích chủ đề bằng Gemini:", error.message);
     throw error;
