@@ -150,20 +150,34 @@ const handleModelError = (state, error) => {
   console.warn(`[Circuit Breaker] Mở cầu dao (OPEN) cho ${state.name}. Thời gian khóa: ${cooldownMs/1000}s. Lỗi: ${error.message}`);
 };
 
-// Gọi SDK tương ứng với Signal Abort
-const callModelWithSignal = async (key, state, prompt, signal) => {
+// Gọi SDK tương ứng với Signal Abort (Hỗ trợ cấu hình JSON Mode)
+const callModelWithSignal = async (key, state, prompt, signal, isJson = false) => {
   if (key.startsWith('groq')) {
     if (!groqClient) throw new Error("Groq client not initialized");
-    const chatCompletion = await groqClient.chat.completions.create({
+    const options = {
       messages: [{ role: 'user', content: prompt }],
       model: state.name,
       temperature: 0.7,
       max_tokens: 4096,
-    }, { signal });
+    };
+    if (isJson) {
+      options.response_format = { type: "json_object" };
+    }
+    const chatCompletion = await groqClient.chat.completions.create(options, { signal });
     return chatCompletion.choices[0].message.content.trim();
   } else {
     if (!state.instance) throw new Error(`Google model instance for ${key} not initialized`);
-    const result = await state.instance.generateContent(prompt, { signal });
+    const reqOptions = { signal };
+    let request;
+    if (isJson) {
+      request = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      };
+    } else {
+      request = prompt;
+    }
+    const result = await state.instance.generateContent(request, reqOptions);
     return result.response.text().trim();
   }
 };
@@ -174,7 +188,7 @@ const callModelWithSignal = async (key, state, prompt, signal) => {
  * @param {string} prompt - Nội dung yêu cầu gửi cho AI
  * @returns {Promise<object>} Đối tượng chứa content, requestedModel, actualMappedName, và provider
  */
-export const generateContentWithFallback = async (prompt, timeoutMs = 25000) => {
+export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJson = false) => {
   await initPromise; // Đảm bảo danh sách mô hình đã được tải xong
   
   const modelKeys = Object.keys(modelStates);
@@ -200,7 +214,7 @@ export const generateContentWithFallback = async (prompt, timeoutMs = 25000) => 
     try {
       // 2. Thực hiện gọi API kèm AbortController và Timeout động
       const resultText = await withTimeout((signal) => {
-        return callModelWithSignal(key, state, prompt, signal);
+        return callModelWithSignal(key, state, prompt, signal, isJson);
       }, timeoutMs);
       
       // 3. Gọi thành công: khôi phục trạng thái cầu dao (CLOSED)
@@ -377,6 +391,34 @@ const sanitizeJsonString = (str) => {
     }
   }
   return result;
+};
+
+// Hàm sửa lỗi và khôi phục mảng JSON bị cắt cụt do chạm giới hạn token
+const tryRepairJsonArray = (text) => {
+  let cleaned = text.trim();
+  if (!cleaned.startsWith('[')) {
+    return null;
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    let lastBraceIdx = cleaned.lastIndexOf('}');
+    while (lastBraceIdx > 0) {
+      const candidate = cleaned.substring(0, lastBraceIdx + 1) + '\n]';
+      try {
+        const parsed = JSON.parse(candidate);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log(`=== [AI Recovery] Đã tự động khôi phục và sửa lỗi JSON bị cắt cụt! Phục hồi được ${parsed.length} câu hỏi. ===`);
+          return parsed;
+        }
+      } catch (err) {
+        // Tiếp tục lùi lại tìm dấu đóng ngoặc trước đó
+      }
+      cleaned = cleaned.substring(0, lastBraceIdx);
+      lastBraceIdx = cleaned.lastIndexOf('}');
+    }
+  }
+  return null;
 };
 
 export const generateExamWithGemini = async (title, topicId, difficulty, numQuestions, documentId, onProgress) => {
@@ -580,14 +622,24 @@ Cấu trúc mỗi phần tử câu hỏi trong mảng như sau:
 ]`;
 
       report('call_ai', 'Đang gửi yêu cầu biên soạn câu hỏi tới mô hình AI (có thể mất 5-15 giây)...');
-      const response = await generateContentWithFallback(prompt, 45000); // 45s timeout cho sinh đề thi nặng
+      const response = await generateContentWithFallback(prompt, 45000, true); // 45s timeout cho sinh đề thi nặng (sử dụng JSON Mode)
       const rawText = response.content;
       
       report('parse_json', 'Đang tiếp nhận và phân tích cú pháp dữ liệu câu hỏi từ AI...');
       // Loại bỏ định dạng block code nếu AI trả về nhầm
       const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
       const sanitizedText = sanitizeJsonString(cleanJsonText);
-      generatedQuestions = JSON.parse(sanitizedText);
+      try {
+        generatedQuestions = JSON.parse(sanitizedText);
+      } catch (parseErr) {
+        console.warn("JSON.parse đề thi thất bại, cố gắng tự động sửa chuỗi JSON bị đứt gãy...");
+        const repaired = tryRepairJsonArray(sanitizedText);
+        if (repaired) {
+          generatedQuestions = repaired;
+        } else {
+          throw parseErr;
+        }
+      }
     }
 
     // 2. Lưu các câu hỏi mới vào collection questions
@@ -700,7 +752,7 @@ Kết quả trả về Bắt buộc phải là một đối tượng JSON duy nh
   }
 }`;
 
-    const response = await generateContentWithFallback(prompt, 25000); // 25s timeout cho nhân bản câu hỏi thích ứng
+    const response = await generateContentWithFallback(prompt, 25000, true); // 25s timeout cho nhân bản câu hỏi thích ứng (sử dụng JSON Mode)
     const rawText = response.content;
     const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const sanitizedText = sanitizeJsonString(cleanJsonText);
@@ -757,11 +809,20 @@ Kết quả trả về BẮT BUỘC phải là một mảng JSON thuần túy, k
   { "name": "Cực trị của hàm số", "topic_id": "cuc_tri_ham_so", "chapter": "Ứng dụng đạo hàm", "grade": 12 }
 ]`;
 
-    const response = await generateContentWithFallback(prompt, 35000); // 35s timeout cho quét chủ đề phức tạp
+    const response = await generateContentWithFallback(prompt, 35000, true); // 35s timeout cho quét chủ đề phức tạp (sử dụng JSON Mode)
     const rawText = response.content;
     const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const sanitizedText = sanitizeJsonString(cleanJsonText);
-    return JSON.parse(sanitizedText);
+    try {
+      return JSON.parse(sanitizedText);
+    } catch (parseErr) {
+      console.warn("JSON.parse chủ đề thất bại, cố gắng tự động sửa chuỗi JSON bị đứt gãy...");
+      const repaired = tryRepairJsonArray(sanitizedText);
+      if (repaired) {
+        return repaired;
+      }
+      throw parseErr;
+    }
   } catch (error) {
     console.error("Lỗi khi phân tích chủ đề bằng Gemini:", error.message);
     throw error;
