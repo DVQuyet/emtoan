@@ -9,10 +9,19 @@ import ReferenceDoc from '../models/ReferenceDoc.js';
 
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKeys = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.split(',').map(k => k.trim()).filter(Boolean) : [];
+const apiKey = apiKeys[0];
 const groqApiKey = process.env.GROQ_API_KEY;
 
 let groqClient = null;
+let geminiClients = [];
+let activeClientIndex = 0;
+
+const rotateGeminiKey = () => {
+  if (geminiClients.length <= 1) return;
+  activeClientIndex = (activeClientIndex + 1) % geminiClients.length;
+  console.log(`=== [Key Rotation] Phát hiện lỗi rate-limit. Tự động xoay sang sử dụng API Key thứ ${activeClientIndex + 1}/${geminiClients.length} ===`);
+};
 
 // Cấu trúc quản lý trạng thái Circuit Breaker và Cooldown của các mô hình AI (Ưu tiên Flash trước)
 const modelStates = {
@@ -27,13 +36,18 @@ const modelStates = {
 let initPromise = null;
 
 const initGeminiModels = async () => {
-  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+  if (apiKeys.length === 0 || apiKeys[0] === 'your_gemini_api_key_here') {
     console.log("=== Cảnh báo: Chưa có GEMINI_API_KEY thực tế. ===");
     return;
   }
+  
+  // Khởi tạo danh sách clients từ các keys được cấu hình
+  geminiClients = apiKeys.map(key => new GoogleGenerativeAI(key));
+  activeClientIndex = 0;
+
   try {
-    // Gọi API để lấy danh sách các mô hình khả dụng thực tế của tài khoản
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    // Gọi API để lấy danh sách các mô hình khả dụng thực tế của tài khoản (sử dụng key đầu tiên)
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKeys[0]}`);
     const data = await res.json();
     if (!res.ok) {
       throw new Error(`Google API returned status ${res.status}: ${data.error?.message || 'Unknown error'}`);
@@ -55,22 +69,11 @@ const initGeminiModels = async () => {
       modelStates['gemini-3.5-flash'].name = 'gemini-2.5-flash';
     }
 
-    const ai = new GoogleGenerativeAI(apiKey);
-    modelStates['gemini-3.1-pro'].instance = ai.getGenerativeModel({ model: modelStates['gemini-3.1-pro'].name });
-    modelStates['gemini-3.5-flash'].instance = ai.getGenerativeModel({ model: modelStates['gemini-3.5-flash'].name });
-    modelStates['gemini-2.5-flash'].instance = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    modelStates['gemini-flash-latest'].instance = ai.getGenerativeModel({ model: 'gemini-flash-latest' });
-
-    console.log(`=== Khởi tạo thành công các dịch vụ AI Gemini (3.1 Pro -> ${modelStates['gemini-3.1-pro'].name}, 3.5 Flash -> ${modelStates['gemini-3.5-flash'].name}, 2.5 Flash, Flash Latest) ===`);
+    console.log(`=== Khởi tạo thành công các dịch vụ AI Gemini với ${geminiClients.length} keys (3.1 Pro -> ${modelStates['gemini-3.1-pro'].name}, 3.5 Flash -> ${modelStates['gemini-3.5-flash'].name}) ===`);
   } catch (error) {
     console.error("Lỗi khi kết nối Google API để lấy danh sách models, sử dụng danh sách mặc định:", error.message);
-    const ai = new GoogleGenerativeAI(apiKey);
     modelStates['gemini-3.1-pro'].name = 'gemini-3.1-pro-preview';
-    modelStates['gemini-3.1-pro'].instance = ai.getGenerativeModel({ model: 'gemini-3.1-pro-preview' });
     modelStates['gemini-3.5-flash'].name = 'gemini-3.5-flash';
-    modelStates['gemini-3.5-flash'].instance = ai.getGenerativeModel({ model: 'gemini-3.5-flash' });
-    modelStates['gemini-2.5-flash'].instance = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    modelStates['gemini-flash-latest'].instance = ai.getGenerativeModel({ model: 'gemini-flash-latest' });
   }
 };
 
@@ -166,19 +169,41 @@ const callModelWithSignal = async (key, state, prompt, signal, isJson = false) =
     const chatCompletion = await groqClient.chat.completions.create(options, { signal });
     return chatCompletion.choices[0].message.content.trim();
   } else {
-    if (!state.instance) throw new Error(`Google model instance for ${key} not initialized`);
-    const reqOptions = { signal };
-    let request;
-    if (isJson) {
-      request = {
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" }
-      };
-    } else {
-      request = prompt;
+    if (geminiClients.length === 0) throw new Error("Google Gemini clients not initialized");
+    
+    let attempts = 0;
+    const maxAttempts = geminiClients.length;
+    
+    while (attempts < maxAttempts) {
+      const activeClient = geminiClients[activeClientIndex];
+      const modelInstance = activeClient.getGenerativeModel({ model: state.name });
+      
+      try {
+        const reqOptions = { signal };
+        let request;
+        if (isJson) {
+          request = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          };
+        } else {
+          request = prompt;
+        }
+        const result = await modelInstance.generateContent(request, reqOptions);
+        return result.response.text().trim();
+      } catch (error) {
+        const errMsg = error.message?.toLowerCase() || '';
+        const isRateLimit = errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('rate_limit');
+        
+        if (isRateLimit && geminiClients.length > 1 && attempts < maxAttempts - 1) {
+          attempts++;
+          rotateGeminiKey();
+          console.warn(`[Key Rotation] Đang thử lại với key dự phòng tiếp theo (lần thử ${attempts + 1}/${maxAttempts})...`);
+          continue;
+        }
+        throw error;
+      }
     }
-    const result = await state.instance.generateContent(request, reqOptions);
-    return result.response.text().trim();
   }
 };
 
