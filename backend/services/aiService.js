@@ -218,6 +218,17 @@ export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJ
   
   const modelKeys = Object.keys(modelStates);
   
+  // Kiểm tra nếu tất cả mô hình đều đang bị khóa (OPEN)
+  const allOpen = modelKeys.every(key => modelStates[key].status === 'OPEN' && Date.now() < modelStates[key].cooldownUntil);
+  if (allOpen) {
+    console.warn("=== [Circuit Breaker Alert] Tất cả các mô hình AI đang bị khóa cooldown. Cưỡng bức reset cầu dao (Force Reset) để tiếp tục thử kết nối... ===");
+    modelKeys.forEach(key => {
+      modelStates[key].status = 'CLOSED';
+      modelStates[key].cooldownUntil = 0;
+      modelStates[key].consecutiveFailures = 0;
+    });
+  }
+  
   for (const key of modelKeys) {
     const state = modelStates[key];
     
@@ -647,7 +658,7 @@ Cấu trúc mỗi phần tử câu hỏi trong mảng như sau:
 ]`;
 
       report('call_ai', 'Đang gửi yêu cầu biên soạn câu hỏi tới mô hình AI (có thể mất 5-15 giây)...');
-      const response = await generateContentWithFallback(prompt, 45000, true); // 45s timeout cho sinh đề thi nặng (sử dụng JSON Mode)
+      const response = await generateContentWithFallback(prompt, 90000, true); // 90s timeout cho sinh đề thi nặng (sử dụng JSON Mode)
       const rawText = response.content;
       
       report('parse_json', 'Đang tiếp nhận và phân tích cú pháp dữ liệu câu hỏi từ AI...');
@@ -796,7 +807,7 @@ Kết quả trả về Bắt buộc phải là một đối tượng JSON duy nh
   }
 }`;
 
-    const response = await generateContentWithFallback(prompt, 25000, true); // 25s timeout cho nhân bản câu hỏi thích ứng (sử dụng JSON Mode)
+    const response = await generateContentWithFallback(prompt, 45000, true); // 45s timeout cho nhân bản câu hỏi thích ứng (sử dụng JSON Mode)
     const rawText = response.content;
     const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const sanitizedText = sanitizeJsonString(cleanJsonText);
@@ -853,7 +864,7 @@ Kết quả trả về BẮT BUỘC phải là một mảng JSON thuần túy, k
   { "name": "Cực trị của hàm số", "topic_id": "cuc_tri_ham_so", "chapter": "Ứng dụng đạo hàm", "grade": 12 }
 ]`;
 
-    const response = await generateContentWithFallback(prompt, 35000, true); // 35s timeout cho quét chủ đề phức tạp (sử dụng JSON Mode)
+    const response = await generateContentWithFallback(prompt, 60000, true); // 60s timeout cho quét chủ đề phức tạp (sử dụng JSON Mode)
     const rawText = response.content;
     const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const sanitizedText = sanitizeJsonString(cleanJsonText);
@@ -956,7 +967,7 @@ Tài liệu PHẢI được định dạng bằng Markdown đẹp mắt và bao 
 - Đảm bảo viết tiếng Việt chuẩn xác, hành văn mạch lạc, học thuật nhưng dễ hiểu đối với học sinh trung bình khá trở lên.
 - Trả về trực tiếp văn bản Markdown của tài liệu, không dùng các từ mở đầu/kết luận như "Dưới đây là..." hay "Hy vọng tài liệu này giúp ích...".`;
 
-    const response = await generateContentWithFallback(prompt, 35000); // 35s timeout cho tổng hợp lý thuyết Wiki
+    const response = await generateContentWithFallback(prompt, 60000); // 60s timeout cho tổng hợp lý thuyết Wiki
     return response.content;
   } catch (error) {
     console.error("Lỗi khi tổng hợp kiến thức bằng Gemini:", error.message);
