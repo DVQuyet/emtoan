@@ -225,13 +225,18 @@ const callModelWithSignal = async (key, state, prompt, signal, isJson = false, e
  * @param {string} prompt - Nội dung yêu cầu gửi cho AI
  * @returns {Promise<object>} Đối tượng chứa content, requestedModel, actualMappedName, và provider
  */
-export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJson = false, enableSearch = false, preferredProvider = null) => {
+export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJson = false, enableSearch = false, preferredProvider = null, preferredModelKey = null) => {
   await initPromise; // Đảm bảo danh sách mô hình đã được tải xong
   
   let modelKeys = Object.keys(modelStates);
   
-  // Sắp xếp lại danh sách mô hình dựa trên nhà cung cấp ưu tiên
-  if (preferredProvider === 'groq') {
+  // Sắp xếp lại danh sách mô hình dựa trên nhà cung cấp/mô hình ưu tiên
+  if (preferredModelKey && modelStates[preferredModelKey]) {
+    modelKeys = [
+      preferredModelKey,
+      ...modelKeys.filter(k => k !== preferredModelKey)
+    ];
+  } else if (preferredProvider === 'groq') {
     modelKeys = [
       ...modelKeys.filter(k => k.startsWith('groq')),
       ...modelKeys.filter(k => !k.startsWith('groq'))
@@ -511,7 +516,7 @@ Yêu cầu thẩm định chi tiết:
   try {
     console.log(`=== [Evaluator Agent] Đang gọi Gemini Pro để thẩm định đề thi chủ đề ${topicId}... ===`);
     // Sử dụng Gemini Pro (hoặc mô hình tốt nhất của Gemini có sẵn) để thẩm định
-    const response = await generateContentWithFallback(prompt, 60000, true, false, 'gemini');
+    const response = await generateContentWithFallback(prompt, 60000, true, false, 'gemini', 'gemini-3.1-pro');
     const rawText = response.content;
     const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const sanitizedText = sanitizeJsonString(cleanJsonText);
