@@ -164,7 +164,7 @@ const handleModelError = (state, error) => {
 };
 
 // Gọi SDK tương ứng với Signal Abort (Hỗ trợ cấu hình JSON Mode)
-const callModelWithSignal = async (key, state, prompt, signal, isJson = false) => {
+const callModelWithSignal = async (key, state, prompt, signal, isJson = false, enableSearch = false) => {
   if (key.startsWith('groq')) {
     if (!groqClient) throw new Error("Groq client not initialized");
     const options = {
@@ -186,7 +186,12 @@ const callModelWithSignal = async (key, state, prompt, signal, isJson = false) =
     
     while (attempts < maxAttempts) {
       const activeClient = geminiClients[activeClientIndex];
-      const modelInstance = activeClient.getGenerativeModel({ model: state.name });
+      
+      const modelOptions = { model: state.name };
+      if (enableSearch) {
+        modelOptions.tools = [{ googleSearch: {} }];
+      }
+      const modelInstance = activeClient.getGenerativeModel(modelOptions);
       
       try {
         const reqOptions = { signal };
@@ -220,10 +225,23 @@ const callModelWithSignal = async (key, state, prompt, signal, isJson = false) =
  * @param {string} prompt - Nội dung yêu cầu gửi cho AI
  * @returns {Promise<object>} Đối tượng chứa content, requestedModel, actualMappedName, và provider
  */
-export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJson = false) => {
+export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJson = false, enableSearch = false, preferredProvider = null) => {
   await initPromise; // Đảm bảo danh sách mô hình đã được tải xong
   
-  const modelKeys = Object.keys(modelStates);
+  let modelKeys = Object.keys(modelStates);
+  
+  // Sắp xếp lại danh sách mô hình dựa trên nhà cung cấp ưu tiên
+  if (preferredProvider === 'groq') {
+    modelKeys = [
+      ...modelKeys.filter(k => k.startsWith('groq')),
+      ...modelKeys.filter(k => !k.startsWith('groq'))
+    ];
+  } else if (preferredProvider === 'gemini') {
+    modelKeys = [
+      ...modelKeys.filter(k => !k.startsWith('groq')),
+      ...modelKeys.filter(k => k.startsWith('groq'))
+    ];
+  }
   
   // Kiểm tra nếu tất cả mô hình đều đang bị khóa (OPEN)
   const allOpen = modelKeys.every(key => modelStates[key].status === 'OPEN' && Date.now() < modelStates[key].cooldownUntil);
@@ -257,7 +275,7 @@ export const generateContentWithFallback = async (prompt, timeoutMs = 25000, isJ
     try {
       // 2. Thực hiện gọi API kèm AbortController và Timeout động
       const resultText = await withTimeout((signal) => {
-        return callModelWithSignal(key, state, prompt, signal, isJson);
+        return callModelWithSignal(key, state, prompt, signal, isJson, enableSearch);
       }, timeoutMs);
       
       // 3. Gọi thành công: khôi phục trạng thái cầu dao (CLOSED)
@@ -464,6 +482,73 @@ const tryRepairJsonArray = (text) => {
   return null;
 };
 
+/**
+ * Thẩm định bộ câu hỏi đã sinh bởi AI 1 (Generator) bằng một AI thứ hai (Gemini Pro)
+ * @param {Array} draftQuestions - Bộ câu hỏi nháp
+ * @param {string} topicId - Chủ đề khảo sát
+ * @returns {Promise<Array>} Bộ câu hỏi đã thẩm định
+ */
+export const evaluateAndFixQuestions = async (draftQuestions, topicId) => {
+  if (!isAiAvailable()) return draftQuestions;
+
+  const prompt = `Bạn là Trưởng ban kiểm duyệt đề thi Toán THPT Quốc gia tại Việt Nam.
+Nhiệm vụ của bạn là kiểm duyệt và thẩm định chất lượng bộ đề thi trắc nghiệm môn Toán sau đây:
+
+BỘ ĐỀ THI NHÁP (JSON):
+${JSON.stringify(draftQuestions, null, 2)}
+
+Yêu cầu thẩm định chi tiết:
+1. Giải lại từng câu hỏi một cách độc lập:
+   - Tính toán kỹ lưỡng xem đáp án "correct_answer" của đề nháp có thực sự là đáp án đúng duy nhất hay không. Nếu phát hiện đáp án sai hoặc đề bài bị vô nghiệm/sai logic toán, hãy sửa lại đề bài hoặc chỉnh lại trường "correct_answer".
+   - Cập nhật trường "solution_steps" để phản ánh lời giải đúng chi tiết từng bước.
+2. Kiểm duyệt các phương án nhiễu (distractor_analysis):
+   - Đảm bảo các phương án sai (A, B, C, D) có các lời giải thích sai lầm hợp lý và có ích cho học sinh (không ghi chung chung hay vô nghĩa).
+3. Kiểm tra hiển thị công thức LaTeX:
+   - Tất cả biểu thức toán học phải dùng LaTeX (bọc bằng $ hoặc $$). Kiểm tra xem cặp dấu $ hoặc $$ có bị lệch, thiếu hoặc bị lỗi cú pháp làm hỏng hiển thị KaTeX không. Sửa lại cho chuẩn.
+4. Trả về kết quả cuối cùng dưới dạng một mảng JSON chuẩn, giữ nguyên cấu trúc các trường thông tin ban đầu.
+5. Không viết thêm bất kỳ văn bản giải thích nào ngoài chuỗi JSON hoàn chỉnh.`;
+
+  try {
+    console.log(`=== [Evaluator Agent] Đang gọi Gemini Pro để thẩm định đề thi chủ đề ${topicId}... ===`);
+    // Sử dụng Gemini Pro (hoặc mô hình tốt nhất của Gemini có sẵn) để thẩm định
+    const response = await generateContentWithFallback(prompt, 60000, true, false, 'gemini');
+    const rawText = response.content;
+    const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+    const sanitizedText = sanitizeJsonString(cleanJsonText);
+    
+    let verifiedQuestions;
+    try {
+      verifiedQuestions = JSON.parse(sanitizedText);
+    } catch (err) {
+      console.warn("JSON.parse trong quá trình kiểm duyệt thất bại, cố gắng sửa chữa...");
+      const repaired = tryRepairJsonArray(sanitizedText);
+      if (repaired) verifiedQuestions = repaired;
+      else throw err;
+    }
+
+    if (verifiedQuestions && !Array.isArray(verifiedQuestions)) {
+      if (Array.isArray(verifiedQuestions.questions)) {
+        verifiedQuestions = verifiedQuestions.questions;
+      } else if (Array.isArray(verifiedQuestions.exam)) {
+        verifiedQuestions = verifiedQuestions.exam;
+      } else if (typeof verifiedQuestions === 'object') {
+        const keys = Object.keys(verifiedQuestions);
+        const arrayKey = keys.find(k => Array.isArray(verifiedQuestions[k]));
+        if (arrayKey) verifiedQuestions = verifiedQuestions[arrayKey];
+      }
+    }
+    
+    if (Array.isArray(verifiedQuestions) && verifiedQuestions.length > 0) {
+      console.log(`=== [Evaluator Agent] Thẩm định thành công ${verifiedQuestions.length} câu hỏi. ===`);
+      console.log("Verified Questions:", JSON.stringify(verifiedQuestions, null, 2));
+      return verifiedQuestions;
+    }
+  } catch (error) {
+    console.error("Lỗi trong quá trình AI thẩm định, tự động sử dụng bộ đề gốc:", error.message);
+  }
+  return draftQuestions; // Fallback trả về đề gốc nếu có lỗi thẩm định
+};
+
 export const generateExamWithGemini = async (title, topicId, difficulty, numQuestions, documentId, onProgress) => {
   const report = (step, msg) => {
     if (onProgress) onProgress(step, msg);
@@ -497,7 +582,12 @@ export const generateExamWithGemini = async (title, topicId, difficulty, numQues
 
     // Lấy tài liệu ngữ cảnh theo yêu cầu (Hỗ trợ đa tài liệu hoạt động đồng thời)
     let refDocs = [];
-    if (documentId === 'default') {
+    let refContext = '';
+    const enableSearch = (documentId === 'web_search');
+
+    if (enableSearch) {
+      refContext = `\n[YÊU CẦU TỰ ĐỘNG TÌM KIẾM TRÊN INTERNET]:\nBạn được cấp công cụ Google Search. Hãy chủ động tra cứu trên Internet để cập nhật lý thuyết, công thức chính xác nhất cùng các dạng bài tập toán thực tế về chủ đề "${topicId}" trước khi biên soạn đề thi.\n`;
+    } else if (documentId === 'default') {
       refDocs = [];
     } else if (documentId && documentId !== 'active') {
       const singleDoc = await ReferenceDoc.findById(documentId);
@@ -513,8 +603,7 @@ export const generateExamWithGemini = async (title, topicId, difficulty, numQues
       });
     }
 
-    let refContext = '';
-    if (refDocs.length > 0) {
+    if (!enableSearch && refDocs.length > 0) {
       const mergedText = refDocs.map(d => {
         const docText = d.extracted_text || '';
         // Giới hạn độ dài văn bản của mỗi tài liệu gửi lên AI để tránh lỗi vượt quá giới hạn token (TPM) của các dịch vụ AI dự phòng như Groq Llama
@@ -664,11 +753,11 @@ Cấu trúc mỗi phần tử câu hỏi trong mảng như sau:
   }
 ]`;
 
-      report('call_ai', 'Đang gửi yêu cầu biên soạn câu hỏi tới mô hình AI (có thể mất 5-15 giây)...');
-      const response = await generateContentWithFallback(prompt, 90000, true); // 90s timeout cho sinh đề thi nặng (sử dụng JSON Mode)
+      report('call_ai', 'Đang gửi yêu cầu biên soạn câu hỏi tới Agent sinh đề (Groq Llama)...');
+      const response = await generateContentWithFallback(prompt, 90000, true, enableSearch, 'groq');
       const rawText = response.content;
       
-      report('parse_json', 'Đang tiếp nhận và phân tích cú pháp dữ liệu câu hỏi từ AI...');
+      report('parse_json', 'Đang tiếp nhận và phân tích cấu trúc đề thi nháp từ AI...');
       // Loại bỏ định dạng block code nếu AI trả về nhầm
       const cleanJsonText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
       const sanitizedText = sanitizeJsonString(cleanJsonText);
@@ -702,6 +791,10 @@ Cấu trúc mỗi phần tử câu hỏi trong mảng như sau:
           generatedQuestions = [];
         }
       }
+
+      // Hội đồng kiểm duyệt và giải lại đề độc lập
+      report('evaluating', 'Hội đồng thẩm định AI đang giải bài độc lập, kiểm duyệt chất lượng & soát lỗi đề thi...');
+      generatedQuestions = await evaluateAndFixQuestions(generatedQuestions, topicId);
     }
 
     // 2. Lưu các câu hỏi mới vào collection questions

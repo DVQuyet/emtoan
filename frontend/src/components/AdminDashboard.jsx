@@ -15,7 +15,7 @@ export default function AdminDashboard() {
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfFiles, setPdfFiles] = useState([]); // Hỗ trợ đa file
   const [documents, setDocuments] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState('active');
+  const [selectedDocId, setSelectedDocId] = useState('web_search');
   
   // States cho danh sách chủ đề động
   const [dbTopics, setDbTopics] = useState([]);
@@ -196,9 +196,10 @@ export default function AdminDashboard() {
         { step: 'init', message: 'Bắt đầu quá trình khởi tạo sinh đề thi Toán...', status: 'pending' },
         { step: 'load_docs', message: 'Đang tải tài liệu ôn tập và ngữ cảnh tham chiếu...', status: 'pending' },
         { step: 'prepare_prompt', message: 'Đang xây dựng prompt chuẩn hóa độ khó toán học...', status: 'pending' },
-        { step: 'call_ai', message: 'Đang gửi yêu cầu biên soạn câu hỏi tới mô hình AI (khoảng 5-15 giây)...', status: 'pending' },
-        { step: 'parse_json', message: 'Đang phân tích cú pháp dữ liệu câu hỏi từ AI...', status: 'pending' },
-        { step: 'save_questions', message: 'Đang lưu các câu hỏi mới và phân tích đáp án vào cơ sở dữ liệu...', status: 'pending' },
+        { step: 'call_ai', message: 'Đang gửi yêu cầu biên soạn câu hỏi tới Agent sinh đề (Groq)...', status: 'pending' },
+        { step: 'parse_json', message: 'Đang tiếp nhận và phân tích đề nháp...', status: 'pending' },
+        { step: 'evaluating', message: 'Đang chạy Hội đồng thẩm định AI giải đề & soát lỗi...', status: 'pending' },
+        { step: 'save_questions', message: 'Đang lưu các câu hỏi mới đã kiểm soát chất lượng vào cơ sở dữ liệu...', status: 'pending' },
         { step: 'save_exam', message: 'Đang khởi tạo cấu trúc đề thi thích ứng...', status: 'pending' }
       ]);
       setShowProgressModal(true);
@@ -762,7 +763,24 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
-
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.4rem', fontWeight: '600' }}>Nguồn tài liệu tham khảo (Ngữ cảnh)</label>
+                <select 
+                  className="chat-input"
+                  style={{ width: '100%' }}
+                  value={selectedDocId}
+                  onChange={(e) => setSelectedDocId(e.target.value)}
+                >
+                  <option value="web_search">🔍 Tự động tra cứu mạng (Google Search Grounding - Khuyên dùng)</option>
+                  <option value="active">✔ Tài liệu đang được nạp mặc định (Chế độ tự lọc)</option>
+                  <option value="default">❌ Không dùng tài liệu (Sinh thuần túy từ kiến thức AI)</option>
+                  {documents.map((d) => (
+                    <option key={d._id} value={d._id}>
+                      📄 {d.title} ({d.doc_type === 'general_exam' ? 'Đề tổng hợp' : `Chủ đề: ${d.topic_id}`})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
