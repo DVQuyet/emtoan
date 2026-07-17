@@ -488,6 +488,60 @@ const tryRepairJsonArray = (text) => {
 };
 
 /**
+ * Chuẩn hóa các trường thông tin của danh sách câu hỏi đề thi để tránh lỗi lệch Key (Tiếng Anh/Tiếng Việt)
+ * @param {Array} questions - Mảng các câu hỏi nháp từ AI
+ * @returns {Array} Mảng các câu hỏi đã được chuẩn hóa theo Database Schema
+ */
+const normalizeQuestionKeys = (questions) => {
+  if (!Array.isArray(questions)) return [];
+  
+  return questions.map(q => {
+    if (!q || typeof q !== 'object') return null;
+    
+    // Chuẩn hóa các trường cấp độ 1
+    const content = q.content || q.de_bai || q.question || q.question_text || q.text || q.cau_hoi || '';
+    const options = q.options || q.choices || q.answers || q.cac_lua_chon || q.lua_chon || {};
+    const correct_answer = q.correct_answer || q.correctAnswer || q.correct || q.answer || q.dap_an || q.dap_an_dung || q.dap_an_chinh_xac || '';
+    const difficulty = q.difficulty || q.do_kho || 'Thông hiểu';
+    
+    // Chuẩn hóa options dạng Array hoặc Object
+    let normalizedOptions = {};
+    if (Array.isArray(options)) {
+      const labels = ['A', 'B', 'C', 'D'];
+      options.forEach((opt, idx) => {
+        if (idx < 4) normalizedOptions[labels[idx]] = String(opt).trim();
+      });
+    } else if (typeof options === 'object') {
+      const keys = Object.keys(options);
+      keys.forEach(k => {
+        const normKey = k.trim().toUpperCase();
+        if (['A', 'B', 'C', 'D'].includes(normKey)) {
+          normalizedOptions[normKey] = String(options[k]).trim();
+        }
+      });
+    }
+    
+    // Chuẩn hóa phân tích AI (ai_analysis)
+    const origAnalysis = q.ai_analysis || q.analysis || q.phan_tich || q.aiAnalysis || {};
+    const distractor_analysis = origAnalysis.distractor_analysis || origAnalysis.distractors || origAnalysis.phan_tich_dap_an_sai || origAnalysis.phan_tich_nhieu || origAnalysis.distractorAnalysis || {};
+    const socratic_hint = origAnalysis.socratic_hint || origAnalysis.hint || origAnalysis.goi_y || origAnalysis.goi_y_socratic || origAnalysis.socraticHint || '';
+    const solution_steps = origAnalysis.solution_steps || origAnalysis.solution || origAnalysis.steps || origAnalysis.loi_giai || origAnalysis.loi_giai_chi_tiet || origAnalysis.solutionSteps || '';
+    
+    return {
+      content: String(content).trim(),
+      difficulty: String(difficulty).trim(),
+      options: normalizedOptions,
+      correct_answer: String(correct_answer).trim().toUpperCase(),
+      ai_analysis: {
+        distractor_analysis,
+        socratic_hint: String(socratic_hint).trim(),
+        solution_steps: String(solution_steps).trim()
+      }
+    };
+  }).filter(Boolean);
+};
+
+/**
  * Thẩm định bộ câu hỏi đã sinh bởi AI 1 (Generator) bằng một AI thứ hai (Gemini Pro)
  * @param {Array} draftQuestions - Bộ câu hỏi nháp
  * @param {string} topicId - Chủ đề khảo sát
@@ -797,9 +851,15 @@ Cấu trúc mỗi phần tử câu hỏi trong mảng như sau:
         }
       }
 
+      // Khử lệch key tiếng Việt/tiếng Anh trước khi gửi đi thẩm định
+      generatedQuestions = normalizeQuestionKeys(generatedQuestions);
+
       // Hội đồng kiểm duyệt và giải lại đề độc lập
       report('evaluating', 'Hội đồng thẩm định AI đang giải bài độc lập, kiểm duyệt chất lượng & soát lỗi đề thi...');
       generatedQuestions = await evaluateAndFixQuestions(generatedQuestions, topicId);
+
+      // Chuẩn hóa lại các key một lần nữa phòng trường hợp AI thẩm định trả về sai lệch tên key
+      generatedQuestions = normalizeQuestionKeys(generatedQuestions);
     }
 
     // 2. Lưu các câu hỏi mới vào collection questions
