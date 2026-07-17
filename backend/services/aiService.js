@@ -6,6 +6,7 @@ import User from '../models/User.js';
 import Question from '../models/Question.js';
 import Exam from '../models/Exam.js';
 import ReferenceDoc from '../models/ReferenceDoc.js';
+import Topic from '../models/Topic.js';
 
 dotenv.config({ override: true });
 
@@ -608,6 +609,73 @@ Yêu cầu thẩm định chi tiết:
   return draftQuestions; // Fallback trả về đề gốc nếu có lỗi thẩm định
 };
 
+/**
+ * Trích xuất mẫu ví dụ prompt tương ứng với từng nhóm chủ đề để tránh lệch hướng AI (Few-Shot Bias)
+ * @param {string} topicId - Mã chủ đề
+ * @param {string} topicName - Tên hiển thị chủ đề
+ * @returns {string} Đoạn ví dụ prompt tương ứng
+ */
+const getExamplePromptByTopic = (topicId, topicName) => {
+  const tId = String(topicId).toLowerCase();
+  const isCucTri = tId.includes('cuc_tri') || tId.includes('dao_ham') || tId.includes('khao_sat');
+  const isTichPhan = tId.includes('tich_phan') || tId.includes('nguyen_ham');
+  const isCapSo = tId.includes('cap_so') || tId.includes('capso') || tId.includes('day_so');
+
+  if (isCucTri) {
+    return `MẪU VÍ DỤ PHÂN HÓA ĐỘ KHÓ VỀ CỰC TRỊ / ĐẠO HÀM:
+1. **Ví dụ Nhận biết (Dễ)**:
+   - Đề bài: "Cho hàm số $y=f(x)$ liên tục trên $\\mathbb{R}$ và có bảng biến thiên của đạo hàm $f'(x)$ như sau... Hỏi hàm số đạt cực đại tại điểm nào?"
+   - Yêu cầu: Đơn giản, học sinh chỉ cần nhìn bảng biến thiên để tìm điểm cực trị của x.
+2. **Ví dụ Thông hiểu (Trung bình)**:
+   - Đề bài: "Tìm điểm cực tiểu của hàm số $y = x^3 - 3x^2 + 5$."
+   - Yêu cầu: Tính đạo hàm $y' = 3x^2 - 6x$, giải $y'=0 \\Leftrightarrow x=0, x=2$, xét dấu chọn $x=2$.
+3. **Ví dụ Vận dụng (Khó vừa)**:
+   - Đề bài: "Tìm tất cả các giá trị thực của tham số $m$ để hàm số $y = \\frac{1}{3}x^3 - mx^2 + (m^2 - m + 1)x + 1$ đạt cực đại tại điểm $x = 1$."
+   - Yêu cầu: Tính $y'$, thiết lập điều kiện cần $y'(1)=0$ giải tìm $m$, sau đó dùng đạo hàm cấp 2 $y''(1) < 0$ để kiểm tra điều kiện đủ.
+4. **Ví dụ Vận dụng cao (Khó hẳn)**:
+   - Đề bài: "Cho hàm số đa thức bậc bốn $y=f(x)$ có đạo hàm $f'(x)$ có đồ thị cắt trục hoành tại ba điểm phân biệt $x=-3$, $x=-1$, $x=1$. Có bao nhiêu giá trị nguyên của tham số $m$ để hàm số $g(x) = f(|x^2-2x| + m)$ có đúng 7 điểm cực trị?"
+   - Yêu cầu: Phân tích đạo hàm hàm hợp, lập bảng biến thiên của $u(x) = |x^2-2x|$, biện luận tương giao đồ thị.`;
+  }
+
+  if (isTichPhan) {
+    return `MẪU VÍ DỤ PHÂN HÓA ĐỘ KHÓ VỀ NGUYÊN HÀM - TÍCH PHÂN:
+1. **Ví dụ Nhận biết (Dễ)**:
+   - Đề bài: "Tìm nguyên hàm của hàm số $f(x) = x^2$."
+   - Yêu cầu: Áp dụng trực tiếp công thức cơ bản $\\int x^{\\alpha} dx = \\frac{x^{\\alpha+1}}{\\alpha+1} + C$.
+2. **Ví dụ Thông hiểu (Trung bình)**:
+   - Đề bài: "Tính tích phân $I = \\int_{0}^{\\frac{\\pi}{2}} \\sin(x) dx$."
+   - Yêu cầu: Tìm nguyên hàm $-\\cos(x)$ và thế cận để tính giá trị cụ thể.
+3. **Ví dụ Vận dụng (Khó vừa)**:
+   - Đề bài: "Tính tích phân $I = \\int_{1}^{e} x \\ln(x) dx$."
+   - Yêu cầu: Áp dụng phương pháp tích phân từng phần (đặt $u = \\ln(x)$, $dv = x dx$).
+4. **Ví dụ Vận dụng cao (Khó hẳn)**:
+   - Đề bài: "Cho hàm số $f(x)$ liên tục trên $\\mathbb{R}$ thỏa mãn $xf'(x) + f(x) = 3x^2$ và $f(1) = 1$. Tính tích phân $I = \\int_{1}^{2} f(x) dx$."
+   - Yêu cầu: Biến đổi vế trái thành đạo hàm tích $(xf(x))' = 3x^2$, lấy nguyên hàm hai vế để tìm hàm $f(x)$, sau đó mới tính tích phân.`;
+  }
+
+  if (isCapSo) {
+    return `MẪU VÍ DỤ PHÂN HÓA ĐỘ KHÓ VỀ CẤP SỐ CỘNG - CẤP SỐ NHÂN:
+1. **Ví dụ Nhận biết (Dễ)**:
+   - Đề bài: "Cho cấp số cộng $(u_n)$ có số hạng đầu $u_1 = 3$ và công sai $d = 2$. Tính $u_2$."
+   - Yêu cầu: Áp dụng công thức số hạng tổng quát $u_2 = u_1 + d$.
+2. **Ví dụ Thông hiểu (Trung bình)**:
+   - Đề bài: "Cho cấp số cộng $(u_n)$ có $u_1 = 3$ và $u_5 = 15$. Tìm công sai $d$."
+   - Yêu cầu: Áp dụng công thức số hạng tổng quát $u_5 = u_1 + 4d$, giải phương trình tìm $d$.
+3. **Ví dụ Vận dụng (Khó vừa)**:
+   - Đề bài: "Cho cấp số cộng $(u_n)$ thỏa mãn hệ phương trình $\\begin{cases} u_1 + u_5 = 18 \\\\ u_3 + u_7 = 26 \\end{cases}$. Tìm số hạng đầu $u_1$ và công sai $d$."
+   - Yêu cầu: Biến đổi các số hạng về theo $u_1$ và $d$, giải hệ hai phương trình hai ẩn tìm $u_1$ và $d$.
+4. **Ví dụ Vận dụng cao (Khó hẳn)**:
+   - Đề bài: "Một người trả góp mua nhà trị giá 1 tỷ đồng. Mỗi tháng trả góp theo hình thức tháng sau tăng thêm $a$ đồng so với tháng trước theo một cấp số cộng. Biết tháng đầu trả 5 triệu đồng và sau 3 năm (36 tháng) thì trả hết nợ. Hỏi mỗi tháng số tiền tăng thêm $a$ là bao nhiêu?"
+   - Yêu cầu: Áp dụng tổng cấp số cộng cho 36 số hạng $S_{36} = 1.000.000.000$, giải phương trình tìm công sai $a$.`;
+  }
+
+  return `MẪU VÍ DỤ PHÂN HÓA ĐỘ KHÓ VỀ ${topicName.toUpperCase()}:
+1. **Ví dụ Nhận biết (Dễ)**: Câu hỏi lý thuyết trực quan, công thức cơ bản áp dụng được ngay mà không cần biến đổi phức tạp.
+2. **Ví dụ Thông hiểu (Trung bình)**: Đòi hỏi áp dụng định lý hoặc công thức giải qua 1-2 bước tính toán cơ bản.
+3. **Ví dụ Vận dụng (Khó vừa)**: Đòi hỏi tính toán kết hợp nhiều bước, giải hệ phương trình hoặc biện luận tham số ở mức trung bình.
+4. **Ví dụ Vận dụng cao (Khó hẳn)**: Bài toán phân hóa học sinh sâu sắc, đòi hỏi tư duy logic cao hoặc bài toán thực tế toán học phức tạp.`;
+};
+
 export const generateExamWithGemini = async (title, topicId, difficulty, numQuestions, documentId, onProgress) => {
   const report = (step, msg) => {
     if (onProgress) onProgress(step, msg);
@@ -615,6 +683,16 @@ export const generateExamWithGemini = async (title, topicId, difficulty, numQues
   try {
     let generatedQuestions = [];
     report('load_docs', 'Đang tải tài liệu ôn tập và ngữ cảnh tham chiếu...');
+    
+    let topicName = topicId;
+    try {
+      const topicDoc = await Topic.findOne({ topic_id: topicId });
+      if (topicDoc) {
+        topicName = topicDoc.name;
+      }
+    } catch (e) {
+      console.warn("Lỗi khi truy vấn tên chủ đề:", e.message);
+    }
     
     // Tính toán phân bổ độ khó động
     let difficultyScores = [];
@@ -751,33 +829,22 @@ export const generateExamWithGemini = async (title, topicId, difficulty, numQues
         return `- **Câu hỏi số ${idx + 1}**: Mức độ **${lvl}** (${criteria})`;
       }).join('\n');
 
-      difficultyInstruction = `Hãy sinh một danh sách gồm chính xác ${numQuestions} câu hỏi trắc nghiệm Toán học lớp 12 thuộc chủ đề "${topicId}" được phân bổ chính xác theo các mức độ khó sau:\n${levelRequirements}`;
+      difficultyInstruction = `Hãy sinh một danh sách gồm chính xác ${numQuestions} câu hỏi trắc nghiệm Toán học lớp 12 thuộc chủ đề "${topicName}" (Mã chủ đề: ${topicId}) được phân bổ chính xác theo các mức độ khó sau:\n${levelRequirements}`;
+
+      // Lấy ví dụ Few-Shot tương ứng với nhóm chủ đề để tránh lệch hướng toán học
+      const fewShotExamples = getExamplePromptByTopic(topicId, topicName);
 
       const prompt = `Bạn là chuyên gia hàng đầu về ra đề thi Toán THPT Quốc gia tại Việt Nam. ${refContext}
 ${difficultyInstruction}
 
-MẪU VÍ DỤ PHÂN HÓA ĐỘ KHÓ (HÃY BÁM SÁT ĐỘ PHỨC TẠP TOÁN HỌC NÀY):
-1. **Ví dụ Nhận biết (Dễ)**:
-   - Đề bài: "Cho hàm số $y=f(x)$ liên tục trên $\\mathbb{R}$ và có bảng biến thiên của đạo hàm $f'(x)$ như sau... Hỏi hàm số đạt cực đại tại điểm nào?"
-   - Yêu cầu: Đơn giản, học sinh chỉ cần nhìn bảng biến thiên để tìm điểm cực trị của x.
-2. **Ví dụ Thông hiểu (Trung bình)**:
-   - Đề bài: "Tìm điểm cực tiểu của hàm số $y = x^3 - 3x^2 + 5$."
-   - Yêu cầu: Tính đạo hàm $y' = 3x^2 - 6x$, giải $y'=0 \\Leftrightarrow x=0, x=2$, xét dấu chọn $x=2$.
-3. **Ví dụ Vận dụng (Khó vừa)**:
-   - Đề bài: "Tìm tất cả các giá trị thực của tham số $m$ để hàm số $y = \\frac{1}{3}x^3 - mx^2 + (m^2 - m + 1)x + 1$ đạt cực đại tại điểm $x = 1$."
-   - Yêu cầu: Tính $y'$, thiết lập điều kiện cần $y'(1)=0$ giải tìm $m$, sau đó dùng đạo hàm cấp 2 $y''(1) < 0$ để kiểm tra điều kiện đủ.
-4. **Ví dụ Vận dụng cao (Khó hẳn - Phân hóa cực sâu)**:
-   - Đề bài: "Cho hàm số đa thức bậc bốn $y=f(x)$ có đạo hàm $f'(x)$ có đồ thị cắt trục hoành tại ba điểm phân biệt $x=-3$, $x=-1$, $x=1$. Có bao nhiêu giá trị nguyên của tham số $m$ để hàm số $g(x) = f(|x^2-2x| + m)$ có đúng 7 điểm cực trị?"
-   - Yêu cầu: Phân tích đạo hàm hàm hợp, lập bảng biến thiên của $u(x) = |x^2-2x|$, biện luận tương giao đồ thị để tìm các giá trị nguyên của $m$ thỏa mãn điều kiện có 7 điểm cực trị. Câu hỏi này đòi hỏi tư duy cực kỳ sâu sắc và nhiều bước suy luận toán học phức tạp.
+${fewShotExamples}
 
 Yêu cầu định dạng toán học:
 - TẤT CẢ các công thức toán học trong câu hỏi và các lựa chọn đáp án PHẢI được bọc trong ký hiệu LaTeX dạng inline (ví dụ: $y = x^2$) hoặc block (ví dụ: $$y = x^2$$) để hiển thị chính xác.
 - KHÔNG sử dụng các ký tự toán học Unicode trần trụi (ví dụ: dùng $x \\in \\mathbb{R}$ thay vì x thuộc R).
 
-HƯỚNG DẪN ĐẶC BIỆT CHO CHỦ ĐỀ CỰC TRỊ / ĐẠO HÀM:
-Nếu chủ đề là "cuc_tri_ham_so" hoặc liên quan đến đạo hàm, và độ khó là Vận dụng hoặc Vận dụng cao:
-1. Hãy sinh các bài toán vận dụng cao như tìm số điểm cực trị của hàm hợp $g(x) = f(u(x))$, hàm trị tuyệt đối $g(x) = |f(x) + m|$, hoặc các hàm liên kết dạng $g(x) = a \\cdot f(x) + b$ dựa trên bảng biến thiên (BBT) hoặc đồ thị của hàm số $f(x)$ hoặc đạo hàm $f'(x)$.
-2. Vẽ bảng biến thiên bằng cấu trúc LaTeX \`\\begin{array}\` đẹp mắt và hợp lệ. Đảm bảo sử dụng ký hiệu xuống dòng trong LaTeX là \`\\\\\` (khi viết trong JSON phải ghi là \`\\\\\\\\\` để tránh bị lỗi escape).
+HƯỚNG DẪN ĐẶC BIỆT CỦA BẢNG BIẾN THIÊN (NẾU CÓ):
+1. Vẽ bảng biến thiên bằng cấu trúc LaTeX \`\\begin{array}\` đẹp mắt và hợp lệ. Đảm bảo sử dụng ký hiệu xuống dòng trong LaTeX là \`\\\\\` (khi viết trong JSON phải ghi là \`\\\\\\\\\` để tránh bị lỗi escape).
 
 Ví dụ vẽ bảng biến thiên của đạo hàm $f'(x)$ trong JSON:
 "content": "Cho hàm số $y=f(x)$ có bảng biến thiên của đạo hàm $f'(x)$ như sau: \\n\\n $$ \\\\begin{array}{c|ccccccc} x & -\\\\infty & & -4 & & 0 & & 1 & & +\\\\infty \\\\\\\\ \\\\hline & +\\\\infty & & & & 3 & & & & +\\\\infty \\\\\\\\ f'(x) & & \\\\searrow & & \\\\nearrow & & \\\\searrow & & \\\\nearrow & \\\\\\\\ & & & -4 & & & & -2 & & \\\\end{array} $$ \\n\\nHỏi hàm số..."
