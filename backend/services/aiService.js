@@ -723,7 +723,7 @@ export const generateExamWithGemini = async (title, topicId, difficulty, numQues
     const enableSearch = (documentId === 'web_search');
 
     if (enableSearch) {
-      refContext = `\n[YÊU CẦU TỰ ĐỘNG TÌM KIẾM TRÊN INTERNET]:\nBạn được cấp công cụ Google Search. Hãy chủ động tra cứu trên Internet để cập nhật lý thuyết, công thức chính xác nhất cùng các dạng bài tập toán thực tế về chủ đề "${topicId}" trước khi biên soạn đề thi.\n`;
+      refContext = `\n[YÊU CẦU TỰ ĐỘNG TÌM KIẾM TRÊN INTERNET]:\nBạn được cấp công cụ Google Search. Hãy chủ động tra cứu trên Internet để cập nhật lý thuyết, công thức chính xác nhất cùng các dạng bài tập toán thực tế về chủ đề "${topicName}" (Mã chủ đề: ${topicId}) trước khi biên soạn đề thi.\n`;
     } else if (documentId === 'default') {
       refDocs = [];
     } else if (documentId && documentId !== 'active') {

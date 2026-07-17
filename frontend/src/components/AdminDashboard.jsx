@@ -486,9 +486,25 @@ export default function AdminDashboard() {
   // Lưu chủ đề tạo thủ công
   const handleSaveManualTopic = async (e) => {
     e.preventDefault();
-    if (!manualTopicName || !manualTopicId || !manualTopicChapter) {
-      return alert("Vui lòng nhập đầy đủ thông tin chủ đề.");
+    if (!manualTopicName) {
+      return alert("Vui lòng nhập tên chủ đề.");
     }
+
+    const generateTopicId = (name) => {
+      return name
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // remove accents
+        .toLowerCase()
+        .replace(/[đĐ]/g, 'd')           // replace special đ character
+        .trim()
+        .replace(/\s+/g, '_')            // replace spaces with _
+        .replace(/[^\w-]+/g, '')         // remove non-word characters except underscores
+        .replace(/--+/g, '_');
+    };
+
+    const generatedId = generateTopicId(manualTopicName);
+    const defaultChapter = `Chủ đề Lớp ${manualTopicGrade}`;
 
     setSavingManualTopic(true);
     try {
@@ -497,8 +513,8 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: manualTopicName,
-          topic_id: manualTopicId,
-          chapter: manualTopicChapter,
+          topic_id: generatedId,
+          chapter: defaultChapter,
           grade: manualTopicGrade
         })
       });
@@ -1169,7 +1185,7 @@ export default function AdminDashboard() {
               </h3>
               
               <form onSubmit={handleSaveManualTopic} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Tên chủ đề</label>
                     <input 
@@ -1179,31 +1195,6 @@ export default function AdminDashboard() {
                       placeholder="VD: Phương trình mặt cầu"
                       value={manualTopicName}
                       onChange={(e) => setManualTopicName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Mã chủ đề (topic_id)</label>
-                    <input 
-                      type="text" 
-                      className="chat-input"
-                      style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                      placeholder="VD: phuong_trinh_mat_cau"
-                      value={manualTopicId}
-                      onChange={(e) => setManualTopicId(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem', color: 'var(--text-muted)' }}>Thuộc chương học</label>
-                    <input 
-                      type="text" 
-                      className="chat-input"
-                      style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                      placeholder="VD: Phương pháp tọa độ Oxyz"
-                      value={manualTopicChapter}
-                      onChange={(e) => setManualTopicChapter(e.target.value)}
                     />
                   </div>
                   <div>
